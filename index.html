@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Caffeine Tracker</title>
-    <!-- Material Components for the Web CSS and Roboto font -->
+    <!-- Material Components for the Web CSS, Material Icons, and Roboto font -->
     <link rel="stylesheet" href="https://unpkg.com/material-components-web@14.0.0/dist/material-components-web.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -50,7 +51,50 @@
         .mdc-list-item:last-child {
             border-bottom: none;
         }
-        /* No custom styling for the datetime-local input */
+        .mdc-list-item .mdc-icon-button {
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+        .mdc-list-item:hover .mdc-icon-button {
+            opacity: 1;
+        }
+        .mdc-list-item__meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Custom style for datetime-local to fit with MDC theme */
+        .custom-text-field {
+            position: relative;
+            padding-top: 20px;
+            margin-bottom: 1.5rem;
+        }
+        .custom-text-field input {
+            font-family: 'Roboto', sans-serif;
+            font-size: 1rem;
+            width: 100%;
+            border: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.42);
+            padding: 0 0 1rem 0;
+            background-color: transparent;
+            box-sizing: border-box;
+        }
+        .custom-text-field input:focus {
+            outline: none;
+            border-bottom: 2px solid #6200ee;
+        }
+        .custom-text-field .mdc-floating-label {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+        .custom-text-field input:focus ~ .mdc-floating-label,
+        .custom-text-field input:valid ~ .mdc-floating-label {
+            transform: translateY(-20px) scale(0.75);
+        }
     </style>
 </head>
 <body>
@@ -74,10 +118,9 @@
                     <div class="mdc-line-ripple"></div>
                 </div>
 
-                <!-- Simple, unstyled datetime-local field -->
-                <div style="margin-bottom: 1.5rem;">
-                    <label for="time">Time of Intake</label>
+                <div class="custom-text-field">
                     <input type="datetime-local" id="time" required>
+                    <label class="mdc-floating-label" for="time">Time of Intake</label>
                 </div>
 
                 <button type="submit" class="mdc-button mdc-button--raised w-full">
@@ -91,6 +134,7 @@
                 <!-- History items will be dynamically added here -->
                 <li id="no-history" class="mdc-list-item mdc-typography--body2 mdc-typography--align-center">No caffeine intake logged yet.</li>
             </ul>
+
         </div>
     </div>
 
@@ -168,14 +212,23 @@
                 entries.forEach(entry => {
                     const li = document.createElement('li');
                     li.className = 'mdc-list-item';
+                    li.dataset.id = entry.id; // Store unique ID on the element
                     const time = new Date(entry.timestamp).toLocaleString();
                     li.innerHTML = `
                         <span class="mdc-list-item__text">
                             <span class="mdc-list-item__primary-text">${entry.amount} mg</span>
                             <span class="mdc-list-item__secondary-text">${time}</span>
                         </span>
+                        <span class="mdc-list-item__meta">
+                            <button class="mdc-icon-button material-icons" data-action="edit">edit</button>
+                            <button class="mdc-icon-button material-icons" data-action="delete">delete</button>
+                        </span>
                     `;
                     historyList.appendChild(li);
+
+                    // Re-initialize MDC ripple on new buttons
+                    mdc.iconButton.MDCIconButtonToggle.attachTo(li.querySelector('[data-action="edit"]'));
+                    mdc.iconButton.MDCIconButtonToggle.attachTo(li.querySelector('[data-action="delete"]'));
                 });
             }
         }
@@ -192,6 +245,7 @@
             }
 
             const newEntry = {
+                id: Date.now(), // Add a unique ID
                 amount: amount,
                 timestamp: new Date(time).toISOString(),
             };
@@ -206,6 +260,92 @@
             amountTextField.value = '';
         });
 
+        // Event delegation for history list actions (edit and delete)
+        historyList.addEventListener('click', (e) => {
+            const button = e.target.closest('button');
+            if (!button) return;
+
+            const action = button.dataset.action;
+            const listItem = button.closest('li');
+            const id = parseInt(listItem.dataset.id);
+
+            if (action === 'delete') {
+                if (confirm('Are you sure you want to delete this entry?')) {
+                    deleteEntry(id);
+                }
+            } else if (action === 'edit') {
+                editEntry(id, listItem);
+            }
+        });
+
+        function deleteEntry(id) {
+            entries = entries.filter(entry => entry.id !== id);
+            saveEntries();
+            renderHistory();
+            calculateActiveCaffeine();
+        }
+
+        function editEntry(id, listItem) {
+            const entry = entries.find(e => e.id === id);
+            if (!entry) return;
+
+            const originalHTML = listItem.innerHTML;
+
+            // Replace list item content with an editable form
+            listItem.innerHTML = `
+                <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+                    <div style="flex-grow: 1;">
+                        <div class="mdc-text-field mdc-text-field--filled" style="width: 100%;">
+                            <input type="number" class="mdc-text-field__input edit-amount" value="${entry.amount}">
+                            <label class="mdc-floating-label">Amount (mg)</label>
+                            <div class="mdc-line-ripple"></div>
+                        </div>
+                    </div>
+                    <div style="flex-grow: 1;">
+                        <div class="custom-text-field">
+                            <input type="datetime-local" class="edit-time" value="${entry.timestamp.slice(0, 16)}">
+                            <label class="mdc-floating-label">Time</label>
+                        </div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button class="mdc-button" data-action="cancel-edit">
+                        <span class="mdc-button__label">Cancel</span>
+                    </button>
+                    <button class="mdc-button mdc-button--raised" data-action="save-edit">
+                        <span class="mdc-button__label">Save</span>
+                    </button>
+                </div>
+            `;
+
+            // Manually re-initialize Material Design components for the new fields
+            const editAmountField = new mdc.textField.MDCTextField(listItem.querySelector('.mdc-text-field'));
+            const saveButton = new mdc.ripple.MDCRipple(listItem.querySelector('[data-action="save-edit"]'));
+            const cancelButton = new mdc.ripple.MDCRipple(listItem.querySelector('[data-action="cancel-edit"]'));
+
+            // Handle save and cancel actions
+            listItem.querySelector('[data-action="save-edit"]').addEventListener('click', () => {
+                const newAmount = parseFloat(listItem.querySelector('.edit-amount').value);
+                const newTime = listItem.querySelector('.edit-time').value;
+
+                if (isNaN(newAmount) || newAmount <= 0 || !newTime) {
+                    return;
+                }
+                
+                // Update the original entry object
+                entry.amount = newAmount;
+                entry.timestamp = new Date(newTime).toISOString();
+                
+                saveEntries();
+                renderHistory();
+                calculateActiveCaffeine();
+            });
+
+            listItem.querySelector('[data-action="cancel-edit"]').addEventListener('click', () => {
+                renderHistory(); // Revert to the original view
+            });
+        }
+
         // Initial setup
         window.onload = function() {
             setTimeInputDefault();
@@ -218,4 +358,3 @@
     </script>
 </body>
 </html>
-
