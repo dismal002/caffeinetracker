@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caffeine Tracker</title>
+    <!-- Material Components for the Web CSS and Roboto font -->
+    <link rel="stylesheet" href="https://unpkg.com/material-components-web@14.0.0/dist/material-components-web.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            color: #212121;
+        }
+        .mdc-card {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .mdc-card-surface {
+            background-color: #fff;
+            padding: 2rem;
+        }
+        .mdc-button--raised {
+            background-color: #6200ee;
+            color: #fff;
+        }
+        .mdc-text-field {
+            margin-bottom: 1.5rem;
+            width: 100%;
+        }
+        .caffeine-level-box {
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .caffeine-level-box .mdc-typography--headline4 {
+            font-weight: 700;
+        }
+        .mdc-list-item {
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .mdc-list-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Custom style for datetime-local to fit with MDC theme */
+        .custom-text-field {
+            position: relative;
+            padding-top: 20px;
+            margin-bottom: 1.5rem;
+        }
+        .custom-text-field input {
+            font-family: 'Roboto', sans-serif;
+            font-size: 1rem;
+            width: 100%;
+            border: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.42);
+            padding: 0 0 1rem 0;
+            background-color: transparent;
+            box-sizing: border-box;
+        }
+        .custom-text-field input:focus {
+            outline: none;
+            border-bottom: 2px solid #6200ee;
+        }
+        .custom-text-field .mdc-floating-label {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+        }
+        .custom-text-field input:focus ~ .mdc-floating-label,
+        .custom-text-field input:valid ~ .mdc-floating-label {
+            transform: translateY(-20px) scale(0.75);
+        }
+    </style>
+</head>
+<body>
+    <div class="mdc-card mdc-elevation--z4">
+        <div class="mdc-card__content mdc-card-surface">
+            <h1 class="mdc-typography--headline5 mdc-typography--align-center">Caffeine Tracker</h1>
+
+            <!-- Current Caffeine Level Display -->
+            <div class="caffeine-level-box">
+                <p class="mdc-typography--subtitle1">Active Caffeine</p>
+                <p id="active-caffeine" class="mdc-typography--headline4">0 mg</p>
+                <p class="mdc-typography--body2 mdc-typography--align-center">Calculated based on a 5-hour half-life.</p>
+            </div>
+
+            <!-- Input Form -->
+            <h2 class="mdc-typography--subtitle1 mdc-typography--align-center">Add New Caffeine Intake</h2>
+            <form id="caffeine-form">
+                <div id="amount-container" class="mdc-text-field mdc-text-field--filled">
+                    <input type="number" id="amount" class="mdc-text-field__input" required>
+                    <label class="mdc-floating-label" for="amount">Caffeine Amount (mg)</label>
+                    <div class="mdc-line-ripple"></div>
+                </div>
+
+                <div class="custom-text-field">
+                    <input type="datetime-local" id="time" required>
+                    <label class="mdc-floating-label" for="time">Time of Intake</label>
+                </div>
+
+                <button type="submit" class="mdc-button mdc-button--raised w-full">
+                    <span class="mdc-button__label">Add Caffeine</span>
+                </button>
+            </form>
+
+            <!-- Caffeine History -->
+            <h2 class="mdc-typography--subtitle1 mdc-typography--align-center mt-8">Intake History</h2>
+            <ul id="history-list" class="mdc-list">
+                <!-- History items will be dynamically added here -->
+                <li id="no-history" class="mdc-list-item mdc-typography--body2 mdc-typography--align-center">No caffeine intake logged yet.</li>
+            </ul>
+
+        </div>
+    </div>
+
+    <!-- Material Components for the Web JS -->
+    <script src="https://unpkg.com/material-components-web@14.0.0/dist/material-components-web.min.js"></script>
+    <script>
+        let entries = [];
+        const halfLifeHours = 5;
+        const storageKey = 'caffeine-entries';
+
+        // Manually initialize Material Components
+        const amountTextField = new mdc.textField.MDCTextField(document.getElementById('amount-container'));
+        const button = new mdc.ripple.MDCRipple(document.querySelector('.mdc-button'));
+
+        // UI elements
+        const amountInput = document.getElementById('amount');
+        const timeInput = document.getElementById('time');
+        const form = document.getElementById('caffeine-form');
+        const activeCaffeineDisplay = document.getElementById('active-caffeine');
+        const historyList = document.getElementById('history-list');
+        const noHistoryMessage = document.getElementById('no-history');
+
+        // Set the current time as the default for the input
+        function setTimeInputDefault() {
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            timeInput.value = now.toISOString().slice(0, 16);
+        }
+
+        // Save entries to localStorage
+        function saveEntries() {
+            localStorage.setItem(storageKey, JSON.stringify(entries));
+        }
+
+        // Load entries from localStorage
+        function loadEntries() {
+            const storedEntries = localStorage.getItem(storageKey);
+            if (storedEntries) {
+                entries = JSON.parse(storedEntries);
+            }
+        }
+
+        // Calculation function
+        function calculateActiveCaffeine() {
+            if (entries.length === 0) {
+                activeCaffeineDisplay.textContent = '0 mg';
+                return;
+            }
+
+            const now = new Date();
+            let totalActiveCaffeine = 0;
+
+            for (const entry of entries) {
+                const intakeTime = new Date(entry.timestamp);
+                const elapsedMilliseconds = now.getTime() - intakeTime.getTime();
+                const elapsedHours = elapsedMilliseconds / (1000 * 60 * 60);
+
+                if (elapsedHours >= 0) {
+                    const remainingCaffeine = entry.amount * Math.pow(0.5, elapsedHours / halfLifeHours);
+                    totalActiveCaffeine += remainingCaffeine;
+                }
+            }
+            activeCaffeineDisplay.textContent = `${totalActiveCaffeine.toFixed(1)} mg`;
+        }
+
+        // Render history list
+        function renderHistory() {
+            historyList.innerHTML = '';
+            if (entries.length === 0) {
+                noHistoryMessage.classList.remove('hidden');
+                historyList.appendChild(noHistoryMessage);
+            } else {
+                noHistoryMessage.classList.add('hidden');
+                entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Sort by newest first
+                entries.forEach(entry => {
+                    const li = document.createElement('li');
+                    li.className = 'mdc-list-item';
+                    const time = new Date(entry.timestamp).toLocaleString();
+                    li.innerHTML = `
+                        <span class="mdc-list-item__text">
+                            <span class="mdc-list-item__primary-text">${entry.amount} mg</span>
+                            <span class="mdc-list-item__secondary-text">${time}</span>
+                        </span>
+                    `;
+                    historyList.appendChild(li);
+                });
+            }
+        }
+
+        // Form submission handler
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const amount = parseFloat(amountInput.value);
+            const time = timeInput.value;
+
+            if (isNaN(amount) || amount <= 0 || !time) {
+                console.error("Invalid input");
+                return;
+            }
+
+            const newEntry = {
+                amount: amount,
+                timestamp: new Date(time).toISOString(),
+            };
+
+            entries.push(newEntry);
+            saveEntries(); // Save to localStorage
+            renderHistory();
+            calculateActiveCaffeine();
+            amountInput.value = '';
+            setTimeInputDefault();
+            // Re-initialize MDC text fields after clearing values
+            amountTextField.value = '';
+        });
+
+        // Initial setup
+        window.onload = function() {
+            setTimeInputDefault();
+            loadEntries(); // Load from localStorage on startup
+            renderHistory();
+            calculateActiveCaffeine();
+            // Start a timer to recalculate active caffeine every minute
+            setInterval(calculateActiveCaffeine, 60 * 1000);
+        };
+    </script>
+</body>
+</html>
+
